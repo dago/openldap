@@ -1,9 +1,10 @@
-/* $OpenLDAP$ */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-perl/modify.c,v 1.21.2.5 2007/01/02 21:44:06 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2013 The OpenLDAP Foundation.
+ * Copyright 1999-2007 The OpenLDAP Foundation.
  * Portions Copyright 1999 John C. Quillan.
  * Portions Copyright 2002 myinternet Limited.
+ * Portions Copyright 2007 Dagobert Michelsen, Baltic Online Computer GmbH.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -16,82 +17,48 @@
  */
 
 #include "perl_back.h"
-#include <ac/string.h>
 
-int
-perl_back_modify(
+void
+pb_stack_prepare_modify(
+	pTHX_
+	pSP_
 	Operation	*op,
-	SlapReply	*rs )
-{
-	PerlBackend *perl_back = (PerlBackend *)op->o_bd->be_private;
-	Modifications *modlist = op->orm_modlist;
-	int count;
-	int i;
+	SlapReply	*rs
+) {
+	Modifications *modlist;
+	AV *av_changes;
 
-	PERL_SET_CONTEXT( PERL_INTERPRETER );
-	ldap_pvt_thread_mutex_lock( &perl_interpreter_mutex );	
+	XPUSHs(sv_2mortal(newSVberval( &op->o_req_dn )));
 
-	{
-		dSP; ENTER; SAVETMPS;
-		
-		PUSHMARK(sp);
-		XPUSHs( perl_back->pb_obj_ref );
-		XPUSHs(sv_2mortal(newSVpv( op->o_req_dn.bv_val , 0)));
+	XPUSHs(sv_2mortal(newSVpv("changes", 0 )));
+	av_changes = newAV();
+	for( modlist = op->orm_modlist; modlist != NULL; modlist = modlist->sml_next ) {
+		Modification *mods = &modlist->sml_mod;
+		AV *av_op, *av_values;
+		int i;
 
-		for (; modlist != NULL; modlist = modlist->sml_next ) {
-			Modification *mods = &modlist->sml_mod;
-
-			switch ( mods->sm_op & ~LDAP_MOD_BVALUES ) {
+		switch ( mods->sm_op & ~LDAP_MOD_BVALUES ) {
 			case LDAP_MOD_ADD:
-				XPUSHs(sv_2mortal(newSVpv("ADD", STRLENOF("ADD") )));
+				av_push(av_changes,newSVpv("add", 0));
 				break;
-				
 			case LDAP_MOD_DELETE:
-				XPUSHs(sv_2mortal(newSVpv("DELETE", STRLENOF("DELETE") )));
+				av_push(av_changes,newSVpv("delete", 0));
 				break;
-				
 			case LDAP_MOD_REPLACE:
-				XPUSHs(sv_2mortal(newSVpv("REPLACE", STRLENOF("REPLACE") )));
+				av_push(av_changes,newSVpv("replace", 0));
 				break;
-			}
-
-			
-			XPUSHs(sv_2mortal(newSVpv( mods->sm_desc->ad_cname.bv_val,
-				mods->sm_desc->ad_cname.bv_len )));
-
-			for ( i = 0;
-				mods->sm_values != NULL && mods->sm_values[i].bv_val != NULL;
-				i++ )
-			{
-				XPUSHs(sv_2mortal(newSVpv( mods->sm_values[i].bv_val, mods->sm_values[i].bv_len )));
-			}
-
-			/* Fix delete attrib without value. */
-			if ( i == 0) {
-				XPUSHs(sv_newmortal());
-			}
 		}
 
-		PUTBACK;
+		av_op = newAV();
+		av_push(av_op, newSVberval( &mods->sm_desc->ad_cname ));
 
-		count = call_method("modify", G_SCALAR);
-
-		SPAGAIN;
-
-		if (count != 1) {
-			croak("Big trouble in back_modify\n");
+		av_values = newAV();
+		for ( i = 0; mods->sm_values != NULL && mods->sm_values[i].bv_val != NULL; i++ ) {
+			av_push(av_values, newSVberval( &mods->sm_values[i] ));
 		}
-							 
-		rs->sr_err = POPi;
 
-		PUTBACK; FREETMPS; LEAVE;
+		av_push(av_op, newRV((SV *) av_values));
+		av_push(av_changes, newRV((SV *) av_op));
 	}
-
-	ldap_pvt_thread_mutex_unlock( &perl_interpreter_mutex );
-
-	send_ldap_result( op, rs );
-
-	Debug( LDAP_DEBUG_ANY, "Perl MODIFY\n", 0, 0, 0 );
-	return( 0 );
+	XPUSHs(sv_2mortal(newRV( (SV *) av_changes)));
 }
-

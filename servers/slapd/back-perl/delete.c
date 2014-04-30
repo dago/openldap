@@ -1,9 +1,10 @@
-/* $OpenLDAP$ */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-perl/delete.c,v 1.18.2.4 2007/01/02 21:44:06 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2013 The OpenLDAP Foundation.
+ * Copyright 1999-2007 The OpenLDAP Foundation.
  * Portions Copyright 1999 John C. Quillan.
  * Portions Copyright 2002 myinternet Limited.
+ * Portions Copyright 2007 Dagobert Michelsen, Baltic Online Computer GmbH.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -17,43 +18,12 @@
 
 #include "perl_back.h"
 
-int
-perl_back_delete(
+void
+pb_stack_prepare_delete(
+	pTHX_
+	pSP_
 	Operation	*op,
 	SlapReply	*rs )
 {
-	PerlBackend *perl_back = (PerlBackend *) op->o_bd->be_private;
-	int count;
-
-	PERL_SET_CONTEXT( PERL_INTERPRETER );
-	ldap_pvt_thread_mutex_lock( &perl_interpreter_mutex );	
-
-	{
-		dSP; ENTER; SAVETMPS;
-
-		PUSHMARK(sp);
-		XPUSHs( perl_back->pb_obj_ref );
-		XPUSHs(sv_2mortal(newSVpv( op->o_req_dn.bv_val , op->o_req_dn.bv_len )));
-
-		PUTBACK;
-
-		count = call_method("delete", G_SCALAR);
-
-		SPAGAIN;
-
-		if (count != 1) {
-			croak("Big trouble in perl-back_delete\n");
-		}
-
-		rs->sr_err = POPi;
-
-		PUTBACK; FREETMPS; LEAVE;
-	}
-
-	ldap_pvt_thread_mutex_unlock( &perl_interpreter_mutex );	
-
-	send_ldap_result( op, rs );
-
-	Debug( LDAP_DEBUG_ANY, "Perl DELETE\n", 0, 0, 0 );
-	return( 0 );
+	XPUSHs(sv_2mortal(newSVberval( &op->o_req_dn )));
 }

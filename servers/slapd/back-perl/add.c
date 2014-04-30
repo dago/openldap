@@ -4,6 +4,7 @@
  * Copyright 1999-2013 The OpenLDAP Foundation.
  * Portions Copyright 1999 John C. Quillan.
  * Portions Copyright 2002 myinternet Limited.
+ * Portions Copyright 2007 Dagobert Michelsen, Baltic Online Computer GmbH.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -17,46 +18,30 @@
 
 #include "perl_back.h"
 
-int
-perl_back_add(
+void
+pb_stack_prepare_add(
+	pTHX_
+	pSP_
 	Operation	*op,
 	SlapReply	*rs )
 {
-	PerlBackend *perl_back = (PerlBackend *) op->o_bd->be_private;
-	int len;
-	int count;
+	Attribute *a;
+	AV *av_attr;
 
-	PERL_SET_CONTEXT( PERL_INTERPRETER );
-	ldap_pvt_thread_mutex_lock( &perl_interpreter_mutex );
-	ldap_pvt_thread_mutex_lock( &entry2str_mutex );
+	XPUSHs(sv_2mortal(newSVberval( &op->ora_e->e_name )));	/* dn (not normalized) */
 
-	{
-		dSP; ENTER; SAVETMPS;
-
-		PUSHMARK(sp);
-		XPUSHs( perl_back->pb_obj_ref );
-		XPUSHs(sv_2mortal(newSVpv( entry2str( op->ora_e, &len ), 0 )));
-
-		PUTBACK;
-
-		count = call_method("add", G_SCALAR);
-
-		SPAGAIN;
-
-		if (count != 1) {
-			croak("Big trouble in back_add\n");
+	XPUSHs(sv_2mortal(newSVpv("attrs",0)));
+	av_attr = newAV();
+	for( a = op->ora_e->e_attrs; a != NULL; a = a->a_next ) {
+		AV *av_values;
+		int i;
+                
+		av_push(av_attr, newSVberval( &a->a_desc->ad_cname ));
+               	av_values = newAV();
+		for( i = 0; a->a_vals[i].bv_val != NULL; i++ ) {
+			av_push(av_values, newSVberval( &a->a_vals[i] ));
 		}
-							 
-		rs->sr_err = POPi;
-
-		PUTBACK; FREETMPS; LEAVE;
+		av_push(av_attr, newRV((SV *) av_values));
 	}
-
-	ldap_pvt_thread_mutex_unlock( &entry2str_mutex );
-	ldap_pvt_thread_mutex_unlock( &perl_interpreter_mutex );	
-
-	send_ldap_result( op, rs );
-
-	Debug( LDAP_DEBUG_ANY, "Perl ADD\n", 0, 0, 0 );
-	return( 0 );
+	XPUSHs(sv_2mortal(newRV_noinc( (SV *) av_attr)));
 }

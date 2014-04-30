@@ -1,7 +1,7 @@
-/* $OpenLDAP$ */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-perl/proto-perl.h,v 1.2.2.5 2007/01/02 21:44:06 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2013 The OpenLDAP Foundation.
+ * Copyright 1999-2007 The OpenLDAP Foundation.
  * Portions Copyright 1999 John C. Quillan.
  * Portions Copyright 2002 myinternet Limited.
  * All rights reserved.
@@ -20,24 +20,33 @@
 
 LDAP_BEGIN_DECL
 
-extern BI_init		perl_back_initialize;
+/*
+ * config.c
+ */
 
-extern BI_close		perl_back_close;
+int perl_back_init_cf( BackendInfo *bi );
+int perl_back_db_init_cf( BackendDB *be );
+
+/*
+ * former external.h
+ */
 
 extern BI_db_init	perl_back_db_init;
 extern BI_db_open	perl_back_db_open;
+extern BI_db_close	perl_back_db_close;
 extern BI_db_destroy	perl_back_db_destroy;
 extern BI_db_config	perl_back_db_config;
 
-extern BI_op_bind	perl_back_bind;
-extern BI_op_search	perl_back_search;
-extern BI_op_compare	perl_back_compare;
-extern BI_op_modify	perl_back_modify;
+extern BI_connection_init	perl_back_connection_init;
+extern BI_connection_destroy	perl_back_connection_destroy;
+
+extern BI_op_func	perl_back_operation;
 extern BI_op_modrdn	perl_back_modrdn;
 extern BI_op_add	perl_back_add;
 extern BI_op_delete	perl_back_delete;
 
-extern int perl_back_init_cf( BackendInfo *bi );
+extern BI_op_extended	perl_back_extended;
+
 LDAP_END_DECL
 
 #endif /* PROTO_PERL_H */

@@ -1,0 +1,67 @@
+TODO:
+
+- check if PerlModule and PerlModulePath are set before specific configuration
+  options
+- 'search' return values as data structures similar to 'add'
+  - search result sending ugly
+  - use send_search_entry on 'search' instead of returning a string
+  with all entries
+- rename method "init" to "open"
+- API with/without connections
+  - with connections: object-interface
+  - without connections: functional interface
+- use interpreter pools
+  - explicit definition of pools in backend-config
+  - reference to pool in database-config
+    - implicit definition with bound dn
+  - convert connection-pool to index, parameters per pool:
+    - Path and name of Perl module
+    - max_idle_interpreters  (-1 = unlimited, initialized with max_connections)
+    - lazy_connection_init (default: =1 database = instant, >1 database = lazy)
+- allow sending of LDIF-strings (str2entry) when string scalar is passed
+- access to interpreters (interpreter => { pool_name => 'dc=test,dc=de', ... }, ... )
+- documentation
+- remove most croaks and replace with UNWILLING TO PERFORM, "Internal error: $@";
+- security: check
+    I32(=int) (keylen) == ber_len_t (=unsigned LBER_LEN_T=unsigned long)
+  when converting berval to sv
+- remove legacy compatibility
+  - Exit with fault if old Perl-module is used with new backend
+  - Provide compatibility-module which must be enabled explicitly
+  - Exit with fault if new Perl-module is used with old backend
+- enhanced error output if the wrong number of arguments is returned
+  - honor ^W
+  - add ENV{PERL_DEBUG} on interpreter instatiation
+  - reasonable defaults
+- verify deadlock bug in deadlock in search.c
+- when connection_init is missing use a single interpreter with a single object
+  - use wrapper to map new api to old api
+  - runtime selectable multithreading by config in slapd.conf
+- use logging framework instead of writing to stderr
+- test compiling
+  - test when Perl is built without threads/with ithreads
+  - test compiling with static/modularized backend
+  - with Perl 5.6 and 5.8
+- describe why threads::shared works
+- fill missing hooks for back-perl
+  - bi_config
+  - bi_destroy
+  - bi_db_close
+  - bi_op_abandon
+  - bi_chk_referrals
+
+MAYBE:
+- gv_fetchmethod only once at database startup
+
+LONGTERM GOALS:
+- implement all entry points
+- dynamic config support
+
+DONE:
+- use a separate interpreter pool for each database
+- Return UNWILLING_TO_PERFORM when method is not there
+- Accept return codes
+  - integer: returned directly
+  - reference to hash: { err => 52, text => "Tired of working" }
+- pass binary attributes directly from/to scalars
+- test multiple databases within the perl backend

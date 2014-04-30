@@ -1,0 +1,288 @@
+# $OpenLDAP$
+# This work is part of OpenLDAP Software <http://www.openldap.org/>.
+# 
+# Copyright 2007 The OpenLDAP Foundation.
+# Portions Copyright 2007 Dagobert Michelsen, Baltic Online Computer GmbH.
+# All rights reserved.
+# 
+# A copy of this license is available in file LICENSE in the
+# top-level directory of the distribution or, alternatively, at
+# <http://www.OpenLDAP.org/license.html>.
+
+H1: The Perl backend back-perl
+
+H2: Introduction
+
+The use of the Perl backend twofold:
+
+(1) rapid prototyping for functionality later implemented
+    in C
+(2) implement complex tasks which would be too expensive
+    (in terms of time) to do in C
+
+
+H2: Features of the current Perl backend
+
+H2: Building OpenLDAP with back-perl
+
+- support for Perl 5.6
+- support for Perl 5.8
+
+Perl:
+        /usr/bin/env    CC=/opt/studio11/SUNWspro/bin/cc \
+        sh Configure    -Dprefix=/opt/perl-5.8.8-ithreads \
+                        -Duseithreads \
+                        -des
+
+OpenLDAP:
+        # o -D_AVL_H ist noetig wegen ITS#4607
+        /usr/bin/env    PATH=/usr/bin:/usr/ccs/bin \
+                        PERLBIN=/opt/perl-5.8.8-ithreads/bin/perl \
+                        CC=/opt/studio11/SUNWspro/bin/cc \
+                        CFLAGS="-I/opt/libtool-1.5.22/include -D_AVL_H -g" \
+                        LDFLAGS="-L/opt/libtool-1.5.22/lib -R/opt/libtool-1.5.22/lib" \
+        ./configure     --prefix=/opt/openldap-2.3.34-mt-custom \
+                        --enable-backends=mod --enable-modules=yes \
+                        --disable-bdb --disable-hdb --disable-ldbm \
+                        --disable-sql \
+                        --enable-perl=mod \
+                        --enable-monitor=mod \
+                        --enable-rlookups \
+                        --disable-overlays
+
+
+
+H2: A simple Perl module
+
+In my current implementation it is mandatory to implement
+connection_init. The returned value must be a reference to
+an object on which the methods for the operations are called
+(like search, compare, etc.)
+
+
+H2: The gory details
+
+H3: How does allocation and deallocation of Perl interprets work?
+
+Perl interpreters are allocated when a connection to OpenLDAP
+is made and released to the pool when the connection is terminated.
+
+This method has some advantages:
+- As access to the Perl interpreter must be exclusive there is
+  no contention because no two operations can be active for one
+  connection at the same time
+- Data from a connection is automatically available in all method
+  invocations for this connection as the calls are all directed to
+  the same Perl interpreter
+
+The disadvange is that there is no data sharing between connections.
+(See (Future work -> Data Sharing) for details).
+Implementing data sharing with this model is quite complex and
+involves attaching (Perl-)magic to shared variables which implements
+mutex'ed access between interpreters.
+
+
+H3: Multithreading
+
+H3: Caveats
+
+Not all Perl modules are thread safe. This is particularly
+true for Net::SSLeay, which forms the base of the LDAPS
+protocol in Net::LDAP. So LDAP access from the Perl backend
+is unencrypted only.
+
+Each database has its own sets of Perl interpreters. Please
+keep in mind that for each connection you make to the LDAP
+server a Perl interpreter for each database is kept. So
+keep the number of databases small (read: one) or have
+plenty of RAM availalable (xxx MB per Perl interpreter).
+
+(Autoloading, method detection and UNWILLING_TO_PERFORM)
+
+H3: Optimizing performance
+
+It is possible to defer Perl interpreter allocation and calling
+connection_init to the first time an operation is issued.
+
+Currently Perl interpreters are never freed once they are released.
+Releasing of more than, say, 5 idle interpreters may be implemented
+as an optimization. I look into that if I have a fully working
+prototype.
+
+H2: API reference
+
+Calls to the modular backend:
+- back_initialize (setup backend callbacks)
+- foreach database:
+  - db_init
+  - foreach config-line;
+    - db_config
+
+- back_open
+- foreach database:
+  - db_open
+
+(DO)
+- foreach database:
+  - db_close
+- back_close
+
+- foreach database:
+  - db_destroy
+- back_destroy
+
+return values
+  - 53                                  (integer return code)
+  - { err => <n>, text => "<string>" }  (integer return code and info text)
+
+
+* ADD
+  - arguments are passed just like Net::LDAP
+    $connection->add( $dn, attrs => [ attr1 => [ value1 ], attr2 => [ value2, value3 ] ], ... )
+* BIND
+    $connection->bind( $dn, password => $password, ... )
+* UNBIND
+    $connection->unbind();
+* COMPARE
+    $connection->compare( $dn, attr => $attr, value => $value, ... )
+* CONFIG
+  $database->config( file => "/myconfig", line => 43, args => [ arg1, args2 ], ... )
+  - Working (e. g. bi_config) like in JLDAP:
+      http://home.fhtw-berlin.de/~oschoen/jldap/diplom/html/node30.html
+* CONNECTION_INIT
+  $database->connection_init( ... )  (returns reference to connection object)
+* CONNECTION_DESTROY
+  $connection->connection_destroy( ... )
+* DELETE
+  $connection->delete( $dn, ... )
+* EXTENDED => TODO: Different operations???
+  $connection->extended( $dn, old_password => $old, new_password => $new, ... );
+* MODIFY
+  - format like in Net::LDAP
+  $connection->modify( $dn, changes => [ add => [ sn => 'Dago' ], delete => [ faxNumber => [] ], replace => ... ], ... );
+* MODRDN
+  $connection->modrdn( $dn, newrds => $newdn, deleteoldrdn => 1, (newsuperior => $sup), ... )
+* SEARCH
+  'scope' and 'deref' are dual-valued scalers (string and integer)
+
+* CHECK_REFERRALS => TODO!!
+
+
+
+
+H2: History
+
+H3: The previous API
+
+- backend methods return actual LDAP result codes, not
+  true/false; this gives the Perl module finer control
+  of the error returned to the client
+
+- a filterSearchResults configuration file directive was
+  added to tell the backend glue that the results returned
+  from the Perl module are candidates only
+
+- the "init" method is called after the backend has been
+  initialized - this lets you do some initialization after
+  *all* configuration file directives have been read
+
+- the interface for the search method is improved to
+  pass the scope, deferencing policy, size limit, etc.
+  See SampleLDAP.pm for details.
+
+The old Perl backend was practically unusable because of the
+following reasons:
+
+- Every call went through a single mutex so the backend was
+  essentially singlethreaded
+- The backend had no idea of connections so requests could not
+  be associated to specific binds
+- Binary attributes could not be passed as only zero-terminated strings
+  were passed to perl
+- Argument passing in general was cumbersome as the detailed structure
+  was lost via entry2str
+- Important entry points like 'extended' were not implemented which
+  is needed for ldappasswd
+- There was no support for multiple databases
+
+H3: Differences to the new backend
+
+The reworked backend works as follows:
+
+- each Perl backend database has a separate Perl interpreter
+- each connection gets an interpreter cloned from the specific
+  backend. Interpreters are recycled in a pool for performance
+- concurrent requests to different interpreters can run
+  concurrently in separate threads
+- connections are correctly tracked with individual objects
+- binary attributed are correctly passed in Perl scalars
+- argument passing is done in a style similar to Net::LDAP,
+  parsing is no longer needed as attributes and values are
+  separately stored
+- named arguments make future extensions possible
+- additional information about the connection is optionally
+  passed as named parameter. It may be advisable later to
+  used magic scalars allowing access to all internal
+  data without the overhead of processing the arguments
+  ahead of time.
+- entry points for connection_init, connection_destroy,
+  extended ops and unbind are implemented.
+- multiple databases are supported.
+- unimplemented entrypoints automatically return 'unwilling
+  to perform'
+- switching to old-backend-compatible-mode is done when
+  there is one pool which is set to 'single-threaded',
+  BackPerlLegacyAPI.pm can be used to convert the API.
+- dynamic configuration is supported.
+
+
+H3: How to update old modules
+
+H2: Future work
+
+H3: Building data structures for attributes on demand
+
+This is possible, however not trivial: The C data structures
+would be implemented as blessed scalars containing the C pointer.
+Access method could then convert the data on demand. However,
+the C pointer must be some kind of "weak" pointer which is
+only valid in the context of this method invocation. Otherwise
+the scalar with the C reference could be stored in the interpreter
+and deferenced later in another method entry where the C data
+has already been freed. This all is a bit complex and can be
+done later without API change if proven useful.
+
+As the method usually does something with the parameters the data
+is needed anyway, so savings here should be minimal if not negative.
+Another thing is access to seldom used data like connection
+parameters or operation details where transformation to your
+proposed structure would indeed be useful.
+
+H3: Data sharing
+
+The new backend is not 100% compatible to the old backend
+due to the lack of data sharing. This is a complex issue
+but maybe solvable with the help of the mod_perl code.
+Alternatively the code could fall back to a single
+interpreter when compatibility mode is on. I am trying
+to avoid legacy compatibility code in the C part and
+move that to a Perl module interposed between back-perl
+and the oldstyle module. To make this as easy both for
+legacy- and new users is a thing I am still working on.
+Personally I dislike the idea of breaking compatibility,
+however I don't know how much people actually use the
+Perl backend broken as it is. The new API is designed
+to be as extendable as possible to avoid incompatible
+changes in the future.
+
+H3: Abandon entry-point
+The 'abandon' entry point is not implemented. That would
+imply signaling between threads I haven't done yet.
+
+H3: More data structures
+
+It is still not possible to do all things from Perl which
+can be done in C. Exposing more datastructures and functions
+to Perl may even make it possible to write overlays in Perl
+in some distant future.
+

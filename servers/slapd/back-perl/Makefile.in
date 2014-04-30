@@ -14,10 +14,10 @@
 ## top-level directory of the distribution or, alternatively, at
 ## <http://www.OpenLDAP.org/license.html>.
 
-SRCS	= init.c search.c close.c config.c bind.c compare.c \
-		modify.c add.c modrdn.c delete.c
-OBJS	= init.lo search.lo close.lo config.lo bind.lo compare.lo \
-		modify.lo add.lo modrdn.lo delete.lo
+SRCS	= init.c pool.c operation.c search.c close.c config.c bind.c compare.c \
+		modify.c add.c modrdn.c delete.c extended.c connection.c util.c
+OBJS	= init.lo pool.lo operation.lo search.lo close.lo config.lo bind.lo compare.lo \
+		modify.lo add.lo modrdn.lo delete.lo extended.lo connection.lo util.lo
 
 LDAP_INCDIR= ../../../include       
 LDAP_LIBDIR= ../../../libraries
