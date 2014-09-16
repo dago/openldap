@@ -73,6 +73,7 @@ sock_back_modrdn(
 		fprintf( fp, "newSuperior: %s\n", op->oq_modrdn.rs_newSup->bv_val );
 	}
 	fprintf( fp, "\n" );
+	fflush( fp );
 
 	/* read in the results and send them along */
 	sock_read_and_send_results( op, rs, fp );

@@ -98,6 +98,7 @@ sock_back_modify(
 		fprintf( fp, "-\n" );
 	}
 	fprintf( fp, "\n" );
+	fflush( fp );
 
 	/* read in the results and send them along */
 	sock_read_and_send_results( op, rs, fp );

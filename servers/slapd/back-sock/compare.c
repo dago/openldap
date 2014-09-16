@@ -74,7 +74,7 @@ sock_back_compare(
 	fprintf( fp, "%s: %s\n",
 		op->oq_compare.rs_ava->aa_desc->ad_cname.bv_val,
 		op->oq_compare.rs_ava->aa_value.bv_val /* could be binary! */ );
-	fclose( fp );
+	fflush( fp );
 
 	/* read in the result and send it along */
 	sock_read_and_send_results( op, rs, fp );

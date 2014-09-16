@@ -64,6 +64,7 @@ sock_back_search(
 		fprintf( fp, " %s", an->an_name.bv_val );
 	}
 	fprintf( fp, "\n\n" );  /* end of attr line plus blank line */
+	fflush( fp );
 
 	/* read in the results and send them along */
 	rs->sr_attrs = op->oq_search.rs_attrs;

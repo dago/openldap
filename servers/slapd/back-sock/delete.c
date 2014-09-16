@@ -67,6 +67,7 @@ sock_back_delete(
 	sock_print_suffixes( fp, op->o_bd );
 	fprintf( fp, "dn: %s\n", op->o_req_dn.bv_val );
 	fprintf( fp, "\n" );
+	fflush( fp );
 
 	/* read in the results and send them along */
 	sock_read_and_send_results( op, rs, fp );

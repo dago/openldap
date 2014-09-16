@@ -60,6 +60,7 @@ sock_back_add(
 	fprintf( fp, "%s", entry2str( op->oq_add.rs_e, &len ) );
 	ldap_pvt_thread_mutex_unlock( &entry2str_mutex );
 	fprintf (fp, "\n" );
+	fflush( fp );
 
 	/* read in the result and send it along */
 	sock_read_and_send_results( op, rs, fp );

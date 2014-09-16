@@ -71,6 +71,7 @@ sock_back_bind(
 	fprintf( fp, "credlen: %lu\n", op->oq_bind.rb_cred.bv_len );
 	fprintf( fp, "cred: %s\n", op->oq_bind.rb_cred.bv_val ); /* XXX */
 	fprintf( fp, "\n" );
+	fflush( fp );
 
 	/* read in the results and send them along */
 	rc = sock_read_and_send_results( op, rs, fp );
