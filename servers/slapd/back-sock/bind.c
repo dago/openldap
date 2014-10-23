@@ -35,9 +35,17 @@ sock_back_bind(
 {
 	struct sockinfo	*si = (struct sockinfo *) op->o_bd->be_private;
 	AttributeDescription *entry = slap_schema.si_ad_entry;
-	Entry e;
-	FILE			*fp;
+	Entry       e;
+	FILE		*fp;
 	int			rc;
+	json_t		*json_request;
+    json_t      *suffixes;
+	int			err;
+	char		*method;
+    int         i;
+    Backend     *be;
+    json_t          *result;
+    json_error_t    error;
 
 	e.e_id = NOID;
 	e.e_name = op->o_req_dn;
@@ -62,19 +70,64 @@ sock_back_bind(
 	}
 
 	/* write out the request to the bind process */
-	fprintf( fp, "BIND\n" );
-	fprintf( fp, "msgid: %ld\n", (long) op->o_msgid );
+/*
 	sock_print_conn( fp, op->o_conn, si );
 	sock_print_suffixes( fp, op->o_bd );
-	fprintf( fp, "dn: %s\n", op->o_req_dn.bv_val );
-	fprintf( fp, "method: %d\n", op->oq_bind.rb_method );
-	fprintf( fp, "credlen: %lu\n", op->oq_bind.rb_cred.bv_len );
-	fprintf( fp, "cred: %s\n", op->oq_bind.rb_cred.bv_val ); /* XXX */
-	fprintf( fp, "\n" );
+*/
+
+	method = "UNDEFINED";
+	switch( op->oq_bind.rb_method ) {
+		case LDAP_AUTH_NONE:
+            method = "NONE";
+            break;
+		case LDAP_AUTH_SIMPLE:
+            method = "SIMPLE";
+            break;
+		case LDAP_AUTH_SASL:
+            method = "SASL";
+            break;
+		case LDAP_AUTH_KRBV4:
+		case LDAP_AUTH_KRBV41:
+		case LDAP_AUTH_KRBV42:
+            method = "KERBEROS";
+            break;
+	}
+
+    be = op->o_bd;
+    suffixes = json_array();
+    for( i = 0; be->be_suffix[i].bv_val != NULL; i++ ) {
+        json_array_append_new( suffixes, json_string( be->be_suffix[i].bv_val ) );
+    }
+
+    json_request = json_pack( "{s:s,s:s,s:{s:s#,s:s,s:s#,s:o},s:I}",
+        "jsonrpc", "2.0"
+        "method", "ldap.bind",
+        "params",
+            "DN", op->o_req_dn.bv_val, op->o_req_dn.bv_len,
+            "method", method,
+            "cred", op->oq_bind.rb_cred.bv_val, op->oq_bind.rb_cred.bv_len,
+            "suffixes", suffixes,
+        "id", (json_int_t) op->o_msgid
+    );
+
+    if( si->si_cookie ) {
+        json_object_set( json_request, "cookie", si->si_cookie );
+    }
+
+
+    err = json_dumpf( json_request, fp, 0 );
+    // fprintf( stderr, json_dumps( json_request, 0 ) );
+    json_decref( json_request );
+    fprintf( fp, "\n" );
 	fflush( fp );
 
+    result = json_loadf( fp, 0, &error );
+    if( !result ) {
+        fprintf( stderr, "Error: %s\n", error.text );
+    }
+
 	/* read in the results and send them along */
-	rc = sock_read_and_send_results( op, rs, fp );
+	rc = sock_read_and_send_results( op, rs, result );
 	fclose( fp );
 
 	return( rc );

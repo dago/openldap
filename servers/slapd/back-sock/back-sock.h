@@ -22,12 +22,14 @@
 #define SLAPD_SOCK_H
 
 #include "proto-sock.h"
+#include <jansson.h>
 
 LDAP_BEGIN_DECL
 
 struct sockinfo {
 	const char	*si_sockpath;
 	slap_mask_t	si_extensions;
+    json_t      *si_cookie;
 };
 
 #define	SOCK_EXT_BINDDN	1
@@ -41,15 +43,33 @@ extern void sock_print_suffixes LDAP_P((
 	FILE *fp,
 	BackendDB *bd));
 
+extern int json_object_add_suffixes LDAP_P((
+	json_t *j,
+	BackendDB *bd));
+
 extern void sock_print_conn LDAP_P((
 	FILE *fp,
+	Connection *conn,
+	struct sockinfo *si));
+
+extern int json_object_add_conn LDAP_P((
+	json_t *j,
 	Connection *conn,
 	struct sockinfo *si));
 
 extern int sock_read_and_send_results LDAP_P((
 	Operation *op,
 	SlapReply *rs,
-	FILE *fp));
+	json_t *result));
+
+extern Entry *json2entry LDAP_P((
+	json_t *j));
+
+static
+json_t *json_stringbv(struct berval *bv)
+{
+    return json_stringn(bv->bv_val, bv->bv_len);
+}
 
 LDAP_END_DECL
 

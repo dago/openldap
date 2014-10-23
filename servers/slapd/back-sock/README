@@ -1,0 +1,122 @@
+TBD:
+- Encode/Decode von Binaerwerten, dafuer sind binaryAttributes in b64 ggf. nicht erforderlich
+- decode(encode("\0")) pruefen, der Inhalt ist nicht gleich, wie werden Binaerwerte in json kodiert?
+
+The JSON-RPC API is designed to be similar to the API used for Json2Ldap, a gateway
+to access LDAP from JSON-RPC (just the opposite direction of what we are
+doing here):
+  http://connect2id.com/products/json2ldap/web-api
+
+* Cookies
+
+There is one important change in concept: As the invocation of the JSONRPC-backend
+is done freshly for each operation there is no guarantee that the LDAP connection is
+sticky to the forked JSONRPC instance. To pass information the result can always
+contain a cookie with an arbitrary JSON data structure that is stored verbatim
+inside LDAP server and is passed as additional parameter on all subsequent operations
+of this connection. The value of the cookie can be changed with every result
+returned.
+
+
+BIND
+
+There is just one BIND method which is called for all methods of binds.
+
+Parameters:
+  DN: Contains the DN for which the credentials are provided for
+  method: NONE | SIMPLE | SASL | KERBEROS
+  cred: The credentials supplied for the bind
+  suffixes: List of suffixes for the relevant backend
+  cookie: An optional data structure with arbitrary data
+
+Result:
+  error: an object containing the returncode of the operation
+    message: a string containing an explanation of the error or the succeeding of the operation
+    code: LDAP return code, 0 for no error and e.g. 53 for unwilling to perform
+  cookie: an optional arbitrary json data object passed on every other operation during this connection
+
+Example:
+
+{ "method"  : "ldap.bind",
+  "id"      : 1,
+  "jsonrpc" : "2.0",
+  "params"  : { "DN"       : "cn=myname,dc=example,dc=com",
+                "method"   : "SIMPLE",
+                "cred"     : "mypass",
+                "suffixes" : ["dc=example,dc=com"]
+              }
+}
+
+{ "error" : { "message" : "ok", "code" : 0 },
+  "cookie": { "authenticated" : 0 }
+}
+
+ADD
+
+Parameters:
+  DN: Contains the DN for the object to be added
+  attributes: object containing the attributes to be added. Each attribute maps to a list of strings.
+  binaryAttributes: same as "attributes" but with the values being base64 encoded
+
+Result: same as for BIND
+
+Example:
+
+{ "method"  : "ldap.add",
+  "id"      : 1,
+  "jsonrpc" : "2.0",
+  "params"  : { "DN"       : "cn=myname,dc=example,dc=com",
+                "attributes" : { "cn" : [ "myname" ],
+                                 "sn" : [ "Arnold", "Benjamin" ]
+                               },
+                "binaryAttributes" : { "jpegPhoto" : [ "AA1289212ABD" ]
+                                     },
+                "cookie" : { "authenticated" : 1 }
+              }
+}
+
+{ "error" : { "message" : "ok", "code" : 0 },
+  "cookie": { "authenticated" : 0 }
+}
+
+SEARCH
+
+Parameters:
+  baseDN: The base DN where the search starts
+  filter: filter string
+  typesOnly: boolean containing if only types should be returned for the results
+  scope: "BASE" | "ONE" | "SUB" | "SUBORDINATES"
+  deref: "NEVER" | "SEARCHING" | "FINDING" | "ALWAYS"
+  sizeLimit: number with the maximum number of results to be returned, 0 means no limit
+  timeLimit: seconds for the maximum duration the operation may take, 0 means no limit
+  attributes: list of strings containing attribute names with the value to be returned as strings
+  binaryAttributes: list of strings containing attribute names with the values to be returned as base64
+
+Result:
+  error: an object containing the returncode of the operation
+    message: a string containing an explanation of the error or the succeeding of the operation
+    code: LDAP return code, 0 for no error and e.g. 53 for unwilling to perform
+  cookie: an optional arbitrary json data object passed on every other operation during this connection
+  matches: either an LDIF string with one entry or an object containing attributes and their values or a
+    list of LDIF strings or objects
+
+Example:
+
+{ "method"  : "ldap.searach",
+  "id"      : 1,
+  "jsonrpc" : "2.0",
+  "params"  : { "baseDN"       : "cn=myname,dc=example,dc=com",
+                "filter"       : "(objectclass=*)",
+                 "typesOnly"   : False,
+                 "scope"       : "SUB",
+                 "deref"       : "NEVER",
+                 "attributes"  : [ "cn", "sn" ]
+              },
+  "cookie" : { "authenticated" : 0 }
+}
+
+{ "error" : { "message" : "ok", "code" : 0 },
+  "cookie": { "authenticated" : 0 },
+  "matches" : [ { "dn" : "cn=myname,dc=example,dc=com", "cn" : "myname", "sn" : [ "Arnold", "Benjamin" ] } ]
+}
+{

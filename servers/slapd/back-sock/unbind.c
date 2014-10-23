@@ -35,7 +35,9 @@ sock_back_unbind(
 )
 {
 	struct sockinfo	*si = (struct sockinfo *) op->o_bd->be_private;
-	FILE			*fp;
+	FILE		*fp;
+	json_t		*json_request;
+	int		err;
 
 	if ( (fp = opensock( si->si_sockpath )) == NULL ) {
 		send_ldap_error( op, rs, LDAP_OTHER,
@@ -44,10 +46,17 @@ sock_back_unbind(
 	}
 
 	/* write out the request to the unbind process */
-	fprintf( fp, "UNBIND\n" );
-	fprintf( fp, "msgid: %ld\n", (long) op->o_msgid );
-	sock_print_conn( fp, op->o_conn, si );
-	sock_print_suffixes( fp, op->o_bd );
+    json_request = json_pack( "{s:s,s:s}",
+        "method", "ldap.unbind",
+        "jsonrpc", "2.0"
+    );
+
+    if( si->si_cookie ) {
+        json_object_set( json_request, "cookie", si->si_cookie );
+    }
+
+    err = json_dumpf( json_request, fp, 0 );
+    json_decref( json_request );
 	fprintf( fp, "\n" );
 
 	/* no response to unbind */

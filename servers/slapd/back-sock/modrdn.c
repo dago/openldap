@@ -37,6 +37,11 @@ sock_back_modrdn(
 	AttributeDescription *entry = slap_schema.si_ad_entry;
 	Entry e;
 	FILE			*fp;
+    json_t          *result;
+    json_t          *params;
+    json_t          *json_request;
+    int             err;
+    json_error_t    error;
 
 	e.e_id = NOID;
 	e.e_name = op->o_req_dn;
@@ -62,6 +67,7 @@ sock_back_modrdn(
 	}
 
 	/* write out the request to the modrdn process */
+/*
 	fprintf( fp, "MODRDN\n" );
 	fprintf( fp, "msgid: %ld\n", (long) op->o_msgid );
 	sock_print_conn( fp, op->o_conn, si );
@@ -72,11 +78,45 @@ sock_back_modrdn(
 	if ( op->oq_modrdn.rs_newSup != NULL ) {
 		fprintf( fp, "newSuperior: %s\n", op->oq_modrdn.rs_newSup->bv_val );
 	}
-	fprintf( fp, "\n" );
+*/
+
+    params = json_object();
+    err = json_object_set_new( params, "DN", json_stringbv( &op->o_req_dn ) );
+    err = json_object_set_new( params, "newRDN", json_stringbv( &op->oq_modrdn.rs_newrdn ) );
+    err = json_object_set_new( params, "deleteOldRDN", json_boolean( op->oq_modrdn.rs_deleteoldrdn ) );
+    err = json_object_set_new( params, "newSuperiorDN",
+      op->oq_modrdn.rs_newSup != NULL ? json_stringbv( op->oq_modrdn.rs_newSup ) : json_null() );
+
+    if( si->si_cookie ) {
+        json_object_set( params, "cookie", si->si_cookie );
+    }
+
+    err = json_object_add_suffixes( params, op->o_bd );
+    err = json_object_add_conn( params, op->o_conn, si );
+
+    json_request = json_pack( "{s:s,s:s,s:o,s:I}",
+        "jsonrpc", "2.0",
+        "method", "ldap.modifyDN",
+        "params", params,
+        "id", (json_int_t) op->o_msgid
+    );
+    if( !json_request ) {
+        fprintf( stderr, "ERR: %s\n", error.text );
+    }
+
+    err = json_dumpf( json_request, fp, 0 );
+    json_decref( json_request );
+    fprintf( fp, "\n" );
 	fflush( fp );
 
-	/* read in the results and send them along */
-	sock_read_and_send_results( op, rs, fp );
+    result = json_loadf( fp, 0, &error );
+    if( !result ) {
+        fprintf( stderr, "Error: %s\n", error.text );
+    }
+
+    /* read in the result and send it along */
+    sock_read_and_send_results( op, rs, result );
+
 	fclose( fp );
 	return( 0 );
 }

@@ -37,6 +37,11 @@ sock_back_compare(
 	AttributeDescription *entry = slap_schema.si_ad_entry;
 	Entry e;
 	FILE			*fp;
+    json_t          *params;
+    json_t          *json_request;
+    json_t          *result;
+    int             err;
+    json_error_t    error;
 
 	e.e_id = NOID;
 	e.e_name = op->o_req_dn;
@@ -66,6 +71,7 @@ sock_back_compare(
 	 */
 
 	/* write out the request to the compare process */
+/*
 	fprintf( fp, "COMPARE\n" );
 	fprintf( fp, "msgid: %ld\n", (long) op->o_msgid );
 	sock_print_conn( fp, op->o_conn, si );
@@ -73,11 +79,45 @@ sock_back_compare(
 	fprintf( fp, "dn: %s\n", op->o_req_dn.bv_val );
 	fprintf( fp, "%s: %s\n",
 		op->oq_compare.rs_ava->aa_desc->ad_cname.bv_val,
-		op->oq_compare.rs_ava->aa_value.bv_val /* could be binary! */ );
+		op->oq_compare.rs_ava->aa_value.bv_val // could be binary!
+    );
+*/
+
+    params = json_object();
+    err = json_object_set_new( params, "DN", json_stringbv( &op->o_req_dn ) );
+    err = json_object_set_new( params, "attribute", json_stringbv( &op->oq_compare.rs_ava->aa_desc->ad_cname ) );
+    /* XXX: value may be binary */
+    err = json_object_set_new( params, "value", json_stringbv( &op->oq_compare.rs_ava->aa_value ) );
+
+    if( si->si_cookie ) {
+        json_object_set( params, "cookie", si->si_cookie );
+    }
+
+    err = json_object_add_suffixes( params, op->o_bd );
+    err = json_object_add_conn( params, op->o_conn, si );
+
+    json_request = json_pack( "{s:s,s:s,s:o,s:I}",
+        "jsonrpc", "2.0",
+        "method", "ldap.compare",
+        "params", params,
+        "id", (json_int_t) op->o_msgid
+    );
+    if( !json_request ) {
+        fprintf( stderr, "ERR: %s\n", error.text );
+    }
+
+    err = json_dumpf( json_request, fp, 0 );
+    json_decref( json_request );
+    fprintf( fp, "\n" );
 	fflush( fp );
 
+    result = json_loadf( fp, 0, &error );
+    if( !result ) {
+        fprintf( stderr, "Error: %s\n", error.text );
+    }
+
 	/* read in the result and send it along */
-	sock_read_and_send_results( op, rs, fp );
+	sock_read_and_send_results( op, rs, result );
 
 	fclose( fp );
 	return( 0 );

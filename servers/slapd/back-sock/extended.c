@@ -1,4 +1,4 @@
-/* delete.c - sock backend delete function */
+/* modrdn.c - sock backend modrdn function */
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
@@ -22,14 +22,14 @@
 
 #include <stdio.h>
 
-#include <ac/string.h>
 #include <ac/socket.h>
+#include <ac/string.h>
 
 #include "slap.h"
 #include "back-sock.h"
 
 int
-sock_back_delete(
+sock_back_extended(
     Operation	*op,
     SlapReply	*rs )
 {
@@ -52,40 +52,46 @@ sock_back_delete(
 	e.e_bv.bv_val = NULL;
 	e.e_private = NULL;
 
-	if ( ! access_allowed( op, &e,
-		entry, NULL, ACL_WDEL, NULL ) )
-	{
-		send_ldap_error( op, rs, LDAP_INSUFFICIENT_ACCESS, NULL );
-		return -1;
-	}
-
 	if ( (fp = opensock( si->si_sockpath )) == NULL ) {
 		send_ldap_error( op, rs, LDAP_OTHER,
 		    "could not open socket" );
 		return( -1 );
 	}
 
-	/* write out the request to the delete process */
-/*
-	fprintf( fp, "DELETE\n" );
-	fprintf( fp, "msgid: %ld\n", (long) op->o_msgid );
-	sock_print_conn( fp, op->o_conn, si );
-	sock_print_suffixes( fp, op->o_bd );
-	fprintf( fp, "dn: %s\n", op->o_req_dn.bv_val );
-	fprintf( fp, "\n" );
-*/
+
+//	if ( bvmatch( BER_BVC(LDAP_EXOP_MODIFY_PASSWD), &op->oq_extended.rs_reqoid ) ) {
+        /* password modify RFC 3062 */
+//	} else {
+        /* generic extended operation */
+ //   }
+
+
+	/* write out the request to the modrdn process */
+
     params = json_object();
     err = json_object_set_new( params, "DN", json_stringbv( &op->o_req_dn ) );
+    err = json_object_set_new( params, "newRDN", json_stringbv( &op->oq_modrdn.rs_newrdn ) );
+    err = json_object_set_new( params, "deleteOldRDN", json_boolean( op->oq_modrdn.rs_deleteoldrdn ) );
+    err = json_object_set_new( params, "newSuperiorDN",
+      op->oq_modrdn.rs_newSup != NULL ? json_stringbv( op->oq_modrdn.rs_newSup ) : json_null() );
+
     if( si->si_cookie ) {
         json_object_set( params, "cookie", si->si_cookie );
     }
 
+    err = json_object_add_suffixes( params, op->o_bd );
+    err = json_object_add_conn( params, op->o_conn, si );
+
     json_request = json_pack( "{s:s,s:s,s:o,s:I}",
         "jsonrpc", "2.0",
-        "method", "ldap.delete",
+        "method", "ldap.modifyDN",
         "params", params,
         "id", (json_int_t) op->o_msgid
     );
+    if( !json_request ) {
+        fprintf( stderr, "ERR: %s\n", error.text );
+    }
+
     err = json_dumpf( json_request, fp, 0 );
     json_decref( json_request );
     fprintf( fp, "\n" );
@@ -96,8 +102,9 @@ sock_back_delete(
         fprintf( stderr, "Error: %s\n", error.text );
     }
 
-	/* read in the results and send them along */
-	sock_read_and_send_results( op, rs, result );
+    /* read in the result and send it along */
+    sock_read_and_send_results( op, rs, result );
+
 	fclose( fp );
 	return( 0 );
 }
