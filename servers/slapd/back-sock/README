@@ -7,11 +7,14 @@ to access LDAP from JSON-RPC (just the opposite direction of what we are
 doing here):
   http://connect2id.com/products/json2ldap/web-api
 
+For the JSON-RPC standard see
+  http://www.jsonrpc.org/specification
+
 * Cookies
 
 There is one important change in concept: As the invocation of the JSONRPC-backend
 is done freshly for each operation there is no guarantee that the LDAP connection is
-sticky to the forked JSONRPC instance. To pass information the result can always
+sticky to the (probable forked) JSONRPC instance. To pass information the result can always
 contain a cookie with an arbitrary JSON data structure that is stored verbatim
 inside LDAP server and is passed as additional parameter on all subsequent operations
 of this connection. The value of the cookie can be changed with every result
@@ -30,25 +33,38 @@ Parameters:
   cookie: An optional data structure with arbitrary data
 
 Result:
-  error: an object containing the returncode of the operation
+  error: an object containing the result of the operation
+    code: LDAP return code, e.g. 53 for unwilling to perform
     message: a string containing an explanation of the error or the succeeding of the operation
-    code: LDAP return code, 0 for no error and e.g. 53 for unwilling to perform
-  cookie: an optional arbitrary json data object passed on every other operation during this connection
+    cookie: an optional arbitrary json data object passed on every other operation during this connection
+      If a cookie has been set earlier and this key is missing the previous cookie is preserved.
+OR
+  result: an object containing the result of the operation
+    code: LDAP return code, e.g. 0 for LDAP_SUCCESS
+    message: a string containing an explanation of the result of the operation
+    cookie: an optional arbitrary json data object passed on every other operation during this connection
+      If a cookie has been set earlier and this key is missing the previous cookie is preserved.
 
 Example:
 
-{ "method"  : "ldap.bind",
-  "id"      : 1,
-  "jsonrpc" : "2.0",
+{ "jsonrpc" : "2.0",
+  "method"  : "ldap.bind",
   "params"  : { "DN"       : "cn=myname,dc=example,dc=com",
                 "method"   : "SIMPLE",
                 "cred"     : "mypass",
                 "suffixes" : ["dc=example,dc=com"]
-              }
+              },
+  "id"      : 1
 }
 
-{ "error" : { "message" : "ok", "code" : 0 },
-  "cookie": { "authenticated" : 0 }
+{ "jsonrpc" : "2.0",
+  "error" : { code: 53, message: "The request contained an illegal character", "data": { "cookie": null } },
+  "id"      : 1
+}
+OR
+{ "jsonrpc" : "2.0",
+  "result" : { "code": 0, message: "Operation completed by backend" }
+  "id"      : 1
 }
 
 ADD
@@ -62,9 +78,8 @@ Result: same as for BIND
 
 Example:
 
-{ "method"  : "ldap.add",
-  "id"      : 1,
-  "jsonrpc" : "2.0",
+{ "jsonrpc" : "2.0",
+  "method"  : "ldap.add",
   "params"  : { "DN"       : "cn=myname,dc=example,dc=com",
                 "attributes" : { "cn" : [ "myname" ],
                                  "sn" : [ "Arnold", "Benjamin" ]
@@ -72,11 +87,18 @@ Example:
                 "binaryAttributes" : { "jpegPhoto" : [ "AA1289212ABD" ]
                                      },
                 "cookie" : { "authenticated" : 1 }
-              }
+              },
+  "id"      : 1
 }
 
-{ "error" : { "message" : "ok", "code" : 0 },
-  "cookie": { "authenticated" : 0 }
+{ "jsonrpc" : "2.0",
+  "error" : { code: 53, message: "The request contained an illegal character", "data": { "cookie": null } },
+  "id"      : 1
+}
+OR
+{ "jsonrpc" : "2.0",
+  "result" : { "code": 0, message: "Operation completed by backend" }
+  "id"      : 1
 }
 
 SEARCH
@@ -93,30 +115,44 @@ Parameters:
   binaryAttributes: list of strings containing attribute names with the values to be returned as base64
 
 Result:
-  error: an object containing the returncode of the operation
+  error: an object containing the result of the operation
+    code: LDAP return code, e.g. 53 for unwilling to perform
     message: a string containing an explanation of the error or the succeeding of the operation
-    code: LDAP return code, 0 for no error and e.g. 53 for unwilling to perform
-  cookie: an optional arbitrary json data object passed on every other operation during this connection
-  matches: either an LDIF string with one entry or an object containing attributes and their values or a
-    list of LDIF strings or objects
+    cookie: an optional arbitrary json data object passed on every other operation during this connection
+      If a cookie has been set earlier and this key is missing the previous cookie is preserved.
+OR
+  result: an object containing the result of the operation
+    code: LDAP return code, e.g. 0 for LDAP_SUCCESS
+    message: a string containing an explanation of the result of the operation
+    matches: either an LDIF string with one entry or an object containing attributes and their values or a
+      list of LDIF strings or objects
+    cookie: an optional arbitrary json data object passed on every other operation during this connection
 
 Example:
 
-{ "method"  : "ldap.searach",
-  "id"      : 1,
-  "jsonrpc" : "2.0",
+{ "jsonrpc" : "2.0",
+  "method"  : "ldap.searach",
   "params"  : { "baseDN"       : "cn=myname,dc=example,dc=com",
                 "filter"       : "(objectclass=*)",
                  "typesOnly"   : False,
                  "scope"       : "SUB",
                  "deref"       : "NEVER",
                  "attributes"  : [ "cn", "sn" ]
+                 "cookie" : { "authenticated" : 0 },
               },
-  "cookie" : { "authenticated" : 0 }
+  "id"      : 1
 }
 
-{ "error" : { "message" : "ok", "code" : 0 },
-  "cookie": { "authenticated" : 0 },
-  "matches" : [ { "dn" : "cn=myname,dc=example,dc=com", "cn" : "myname", "sn" : [ "Arnold", "Benjamin" ] } ]
+{ "jsonrpc" : "2.0",
+  "error" : { "code": 53,
+              "message" : "No data available",
+              "data": { "cookie": null }
+            },
+  "id"      : 1
 }
-{
+OR
+{ "jsonrpc" : "2.0",
+  "result" : { "code": 0, "message" : "ok",
+               "matches" : [ { "dn" : "cn=myname,dc=example,dc=com", "cn" : "myname", "sn" : [ "Arnold", "Benjamin" ] } ],
+               "cookie": { "authenticated" : 0 },
+  "id"      : 1

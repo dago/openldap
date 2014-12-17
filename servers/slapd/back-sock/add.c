@@ -36,16 +36,16 @@ sock_back_add(
 {
 	struct sockinfo	*si = (struct sockinfo *) op->o_bd->be_private;
 	AttributeDescription *entry = slap_schema.si_ad_entry;
-    Attribute   *a;
+	Attribute   *a;
 	FILE			*fp;
 	int			len;
-    json_t      *json_request;
-    json_t      *params;
-    json_t      *attributes, *binary_attributes;
-    json_t          *result;
-    json_error_t    error;
-    int         err;
-
+	json_t      *json_request;
+	json_t      *params;
+	json_t      *attributes, *binary_attributes;
+	json_t          *result;
+	json_error_t    error;
+	int         err;
+	
 	if ( ! access_allowed( op, op->oq_add.rs_e,
 		entry, NULL, ACL_WADD, NULL ) )
 	{
@@ -60,96 +60,84 @@ sock_back_add(
 	}
 
 	/* write out the request to the add process */
-/*
-	fprintf( fp, "ADD\n" );
-	fprintf( fp, "msgid: %ld\n", (long) op->o_msgid );
-	sock_print_conn( fp, op->o_conn, si );
-	sock_print_suffixes( fp, op->o_bd );
-	ldap_pvt_thread_mutex_lock( &entry2str_mutex );
-	fprintf( fp, "%s", entry2str( op->oq_add.rs_e, &len ) );
-	ldap_pvt_thread_mutex_unlock( &entry2str_mutex );
-	fprintf (fp, "\n" );
-*/
-
-    params = json_object();
+	params = json_object();
 	err = json_object_set_new( params, "DN", json_stringbv( &op->ora_e->e_name ) );
 
-    attributes = json_object();
-    binary_attributes = json_object();
+	attributes = json_object();
+	binary_attributes = json_object();
 
-    for( a = op->ora_e->e_attrs; a != NULL; a = a->a_next ) {
-        json_t *values;
-        int i;
+	for( a = op->ora_e->e_attrs; a != NULL; a = a->a_next ) {
+		json_t *values;
+		int i;
 
-        if ( slap_syntax_is_binary( a->a_desc->ad_type->sat_syntax ) ||
-             slap_syntax_is_blob( a->a_desc->ad_type->sat_syntax ) )
-            continue;
+		if ( slap_syntax_is_binary( a->a_desc->ad_type->sat_syntax ) ||
+		     slap_syntax_is_blob( a->a_desc->ad_type->sat_syntax ) )
+			continue;
 
-        values = json_array();
-        for( i = 0; a->a_vals[i].bv_val != NULL; i++ ) {
-            json_array_append_new( values, json_stringbv( &a->a_vals[i] ) );
-        }
-        json_object_set_new( attributes, a->a_desc->ad_cname.bv_val, values );
-    }
+		values = json_array();
+		for( i = 0; a->a_vals[i].bv_val != NULL; i++ ) {
+			json_array_append_new( values, json_stringbv( &a->a_vals[i] ) );
+		}
+		json_object_set_new( attributes, a->a_desc->ad_cname.bv_val, values );
+	}
 
-    /* binary attributes are in base64 */
-    for( a = op->ora_e->e_attrs; a != NULL; a = a->a_next ) {
-        json_t *values;
-        int i;
+	/* binary attributes are in base64 */
+	for( a = op->ora_e->e_attrs; a != NULL; a = a->a_next ) {
+		json_t *values;
+		int i;
 
-        if ( !slap_syntax_is_binary( a->a_desc->ad_type->sat_syntax ) &&
-             !slap_syntax_is_blob( a->a_desc->ad_type->sat_syntax ) )
-            continue;
+		if ( !slap_syntax_is_binary( a->a_desc->ad_type->sat_syntax ) &&
+		     !slap_syntax_is_blob( a->a_desc->ad_type->sat_syntax ) )
+			continue;
 
-        values = json_array();
-        for( i = 0; a->a_vals[i].bv_val != NULL; i++ ) {
-            char    *b64val;
-            size_t  b64len;
-            int     rc;
+		values = json_array();
+		for( i = 0; a->a_vals[i].bv_val != NULL; i++ ) {
+			char    *b64val;
+			size_t  b64len;
+			int     rc;
 
-            b64len = LUTIL_BASE64_ENCODE_LEN( a->a_vals[i].bv_len ) + 1;
-            b64val = ber_memalloc( b64len );
-            if( b64val == NULL ) {
-            }
+			b64len = LUTIL_BASE64_ENCODE_LEN( a->a_vals[i].bv_len ) + 1;
+			b64val = ber_memalloc( b64len );
+			if( b64val == NULL ) {
+			}
 
-            rc = lutil_b64_ntop(
-                (unsigned char *) a->a_vals[i].bv_val, a->a_vals[i].bv_len,
-                b64val, b64len );
-    
-            if( rc < 0 ) {
-            }
+			rc = lutil_b64_ntop(
+				(unsigned char *) a->a_vals[i].bv_val, a->a_vals[i].bv_len,
+				b64val, b64len );
+			if( rc < 0 ) {
+			}
+			json_array_append_new( values, json_stringn( b64val, b64len ) );
+			ber_memfree( b64val );
+		}
 
-            json_array_append_new( values, json_stringn( b64val, b64len ) );
-            ber_memfree( b64val );
-        }
-        json_object_set_new( binary_attributes, a->a_desc->ad_cname.bv_val, values );
-    }
+		json_object_set_new( binary_attributes, a->a_desc->ad_cname.bv_val, values );
+	}
 
-    err = json_object_set_new( params, "attributes", attributes );
-    err = json_object_set_new( params, "binaryAttributes", binary_attributes );
-    if( si->si_cookie ) {
-        json_object_set( params, "cookie", si->si_cookie );
-    }
+	err = json_object_set_new( params, "attributes", attributes );
+	err = json_object_set_new( params, "binaryAttributes", binary_attributes );
+	if( si->si_cookie ) {
+		json_object_set( params, "cookie", si->si_cookie );
+	}
 
-    err = json_object_add_suffixes( params, op->o_bd );
-    err = json_object_add_conn( params, op->o_conn, si );
+	err = json_object_add_suffixes( params, op->o_bd );
+	err = json_object_add_conn( params, op->o_conn, si );
 
-    json_request = json_pack( "{s:s,s:s,s:o,s:I}",
-        "jsonrpc", "2.0",
-        "method", "ldap.add",
-        "params", params,
-        "id", (json_int_t) op->o_msgid
-    );
+	json_request = json_pack( "{s:s,s:s,s:o,s:I}",
+		"jsonrpc", "2.0",
+		"method", "ldap.add",
+		"params", params,
+		"id", (json_int_t) op->o_msgid
+	);
 
-    err = json_dumpf( json_request, fp, 0 );
-    json_decref( json_request );
-    fprintf( fp, "\n" );
+	err = json_dumpf( json_request, fp, 0 );
+	json_decref( json_request );
+	fprintf( fp, "\n" );
 	fflush( fp );
 
-    result = json_loadf( fp, 0, &error );
-    if( !result ) {
-        fprintf( stderr, "Error: %s\n", error.text );
-    }
+	result = json_loadf( fp, 0, &error );
+	if( !result ) {
+		fprintf( stderr, "Error: %s\n", error.text );
+	}
 
 	/* read in the result and send it along */
 	sock_read_and_send_results( op, rs, result );

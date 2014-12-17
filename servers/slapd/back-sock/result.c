@@ -47,21 +47,21 @@ sock_read_and_send_results(
 	json_error_t	error;
 
 	if( json_is_object( result ) ) {
-		// {"info":"okay","code":0}
+	// {"info":"okay","code":0}
         //  "error" : { "code" : 1103, "message" : "LDAP server down or invalid host\/port" }
-		json_t *result_message, *result_code, *result_cookie;
-        json_t *error;
-        json_t *referrals;
+	json_t *result_message, *result_code, *result_cookie;
+	json_t *error;
+	json_t *referrals;
 
-        referrals = json_object_get( result, "referrals" );
-        if( referrals != NULL ) {
-            if( json_is_string( referrals ) ||
-                (json_is_array( referrals ) && json_array_size( referrals ) > 0)) {
-                /* There are actually referrals to send, preset ldap result with referral
-                 * but leave it ready to be overridden. */
-                rs->sr_err = LDAP_REFERRAL;
-            }
-        }
+	referrals = json_object_get( result, "referrals" );
+	if( referrals != NULL ) {
+		if( json_is_string( referrals ) ||
+			(json_is_array( referrals ) && json_array_size( referrals ) > 0)) {
+			/* There are actually referrals to send, preset ldap result with referral
+			 * but leave it ready to be overridden. */
+			rs->sr_err = LDAP_REFERRAL;
+		}
+	}
 
         error = json_object_get( result, "error" );
         if( error ) {

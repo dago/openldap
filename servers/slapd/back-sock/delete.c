@@ -36,12 +36,12 @@ sock_back_delete(
 	struct sockinfo	*si = (struct sockinfo *) op->o_bd->be_private;
 	AttributeDescription *entry = slap_schema.si_ad_entry;
 	Entry e;
-	FILE			*fp;
-    json_t          *result;
-    json_t          *params;
-    json_t          *json_request;
-    int             err;
-    json_error_t    error;
+	FILE		*fp;
+	json_t          *result;
+	json_t          *params;
+	json_t          *json_request;
+	int             err;
+	json_error_t    error;
 
 	e.e_id = NOID;
 	e.e_name = op->o_req_dn;
@@ -66,35 +66,27 @@ sock_back_delete(
 	}
 
 	/* write out the request to the delete process */
-/*
-	fprintf( fp, "DELETE\n" );
-	fprintf( fp, "msgid: %ld\n", (long) op->o_msgid );
-	sock_print_conn( fp, op->o_conn, si );
-	sock_print_suffixes( fp, op->o_bd );
-	fprintf( fp, "dn: %s\n", op->o_req_dn.bv_val );
-	fprintf( fp, "\n" );
-*/
-    params = json_object();
-    err = json_object_set_new( params, "DN", json_stringbv( &op->o_req_dn ) );
-    if( si->si_cookie ) {
-        json_object_set( params, "cookie", si->si_cookie );
-    }
+	params = json_object();
+	err = json_object_set_new( params, "DN", json_stringbv( &op->o_req_dn ) );
+	if( si->si_cookie ) {
+		json_object_set( params, "cookie", si->si_cookie );
+	}
 
-    json_request = json_pack( "{s:s,s:s,s:o,s:I}",
-        "jsonrpc", "2.0",
-        "method", "ldap.delete",
-        "params", params,
-        "id", (json_int_t) op->o_msgid
-    );
-    err = json_dumpf( json_request, fp, 0 );
-    json_decref( json_request );
-    fprintf( fp, "\n" );
+	json_request = json_pack( "{s:s,s:s,s:o,s:I}",
+		"jsonrpc", "2.0",
+		"method", "ldap.delete",
+		"params", params,
+		"id", (json_int_t) op->o_msgid
+	);
+	err = json_dumpf( json_request, fp, 0 );
+	json_decref( json_request );
+	fprintf( fp, "\n" );
 	fflush( fp );
 
-    result = json_loadf( fp, 0, &error );
-    if( !result ) {
-        fprintf( stderr, "Error: %s\n", error.text );
-    }
+	result = json_loadf( fp, 0, &error );
+	if( !result ) {
+		fprintf( stderr, "Error: %s\n", error.text );
+	}
 
 	/* read in the results and send them along */
 	sock_read_and_send_results( op, rs, result );

@@ -36,6 +36,7 @@ sock_back_unbind(
 {
 	struct sockinfo	*si = (struct sockinfo *) op->o_bd->be_private;
 	FILE		*fp;
+	json_t		*params;
 	json_t		*json_request;
 	int		err;
 
@@ -45,18 +46,22 @@ sock_back_unbind(
 		return( -1 );
 	}
 
+	params = json_object();
+	if( si->si_cookie ) {
+		json_object_set( params, "cookie", si->si_cookie );
+	}
+
 	/* write out the request to the unbind process */
-    json_request = json_pack( "{s:s,s:s}",
-        "method", "ldap.unbind",
-        "jsonrpc", "2.0"
-    );
+	json_request = json_pack( "{s:s,s:s,s:o,s:I}",
+		"jsonrpc", "2.0",
+		"method", "ldap.unbind",
+		"params", params,
+                "id", (json_int_t) op->o_msgid
+	);
 
-    if( si->si_cookie ) {
-        json_object_set( json_request, "cookie", si->si_cookie );
-    }
 
-    err = json_dumpf( json_request, fp, 0 );
-    json_decref( json_request );
+	err = json_dumpf( json_request, fp, 0 );
+	json_decref( json_request );
 	fprintf( fp, "\n" );
 
 	/* no response to unbind */
