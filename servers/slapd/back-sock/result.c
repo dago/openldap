@@ -42,64 +42,121 @@ int
 sock_read_and_send_results(
     Operation	*op,
     SlapReply	*rs,
-    json_t      *result )
+    json_t      *jr )
 {
 	json_error_t	error;
 
-	if( json_is_object( result ) ) {
-	// {"info":"okay","code":0}
-        //  "error" : { "code" : 1103, "message" : "LDAP server down or invalid host\/port" }
-	json_t *result_message, *result_code, *result_cookie;
-	json_t *error;
-	json_t *referrals;
+	if( json_is_object( jr ) ) {
+		/*
+		 * { "jsonrpc" : "2.0",
+		 * "error" : { code: 53, message: "The request contained an illegal character", "data": { "cookie": null } },
+		 * "id"      : 1
+		 * }
+		 * OR
+		 * { "jsonrpc" : "2.0",
+		 * "result" : { "code": 0, message: "Operation completed by backend" }
+		 * "id"      : 1
+		 * }
+		 */
 
-	referrals = json_object_get( result, "referrals" );
-	if( referrals != NULL ) {
-		if( json_is_string( referrals ) ||
-			(json_is_array( referrals ) && json_array_size( referrals ) > 0)) {
-			/* There are actually referrals to send, preset ldap result with referral
-			 * but leave it ready to be overridden. */
-			rs->sr_err = LDAP_REFERRAL;
+		json_t *result_message, *result_code, *result_cookie = NULL;
+		json_t *error, *result;
+		json_t *referrals;
+
+		/* XXX referrals should be in result only */
+		referrals = json_object_get( jr, "referrals" );
+		if( referrals != NULL ) {
+			if( json_is_string( referrals ) ||
+				(json_is_array( referrals ) && json_array_size( referrals ) > 0)) {
+				/* There are actually referrals to send, preset ldap result with referral
+				 * but leave it ready to be overridden. */
+				rs->sr_err = LDAP_REFERRAL;
+			}
+		}
+
+		error = json_object_get( jr, "error" );
+		if( error ) {
+			json_t	*data;
+
+			result_code = json_object_get( error, "code" );
+			if( result_code == NULL ) {
+				rs->sr_err = 0;
+			} else if( !json_is_integer( result_code ) ) {
+				Debug( LDAP_DEBUG_ANY,
+					"   sock_read_and_send_results error code (wrong JSON type, valid are INTEGER found %d)\n",
+					json_typeof( result_code ), 0, 0 );
+				rs->sr_err = 0;
+				/* XXX: Map LDAP returncode strings like LDAP_OPERATIONS_ERROR to integer values */
+			} else {
+				rs->sr_err = json_integer_value( result_code );
+			}
+
+			result_message = json_object_get( error, "message" );
+			if( result_message == NULL ) {
+				rs->sr_text = NULL;
+			} else if( !json_is_string( result_message ) ) {
+				rs->sr_text = NULL;
+			} else {
+				rs->sr_text = json_string_value( result_message );
+			}
+
+			data = json_object_get( error, "data" );
+			if( data ) {
+				result_cookie = json_object_get( data, "cookie" );
+			}
+		}
+
+		result = json_object_get( jr, "result" );
+		if( result ) {
+			result_code = json_object_get( result, "code" );
+			if( result_code == NULL ) {
+				rs->sr_err = 0;
+			} else if( !json_is_integer( result_code ) ) {
+				Debug( LDAP_DEBUG_ANY,
+					"   sock_read_and_send_results error code (wrong JSON type, valid are INTEGER found %d)\n",
+					json_typeof( result_code ), 0, 0 );
+				rs->sr_err = 0;
+				/* XXX: Map LDAP returncode strings like LDAP_OPERATIONS_ERROR to integer values */
+			} else {
+				rs->sr_err = json_integer_value( result_code );
+			}
+
+			result_message = json_object_get( result, "message" );
+			if( result_message == NULL ) {
+				rs->sr_text = NULL;
+			} else if( !json_is_string( result_message ) ) {
+				rs->sr_text = NULL;
+			} else {
+				rs->sr_text = json_string_value( result_message );
+			}
+
+			result_cookie = json_object_get( result, "cookie" );
+		}
+
+		if( error && result ) {
+			Debug( LDAP_DEBUG_ANY,
+				"   Returned JSON object has both error and result fields\n",
+				0, 0, 0 );
+		}
+
+		if( result_cookie ) {
+			struct sockinfo *si = (struct sockinfo *) op->o_bd->be_private;
+
+			if( si->si_cookie ) {
+				json_decref( si->si_cookie );
+			}
+			si->si_cookie = json_incref( result_cookie );
 		}
 	}
-
-        error = json_object_get( result, "error" );
-        if( error ) {
-		    result_message = json_object_get( error, "message" );
-		    if( result_message == NULL ) {
-			    rs->sr_text = NULL;
-		    } else if( !json_is_string( result_message ) ) {
-			    rs->sr_text = NULL;
-		    } else {
-			    rs->sr_text = json_string_value( result_message );
-		    }
-
-		    result_code = json_object_get( error, "code" );
-		    if( result_code == NULL ) {
-			    rs->sr_err = 0;
-		    } else if( !json_is_integer( result_code ) ) {
-		        Debug( LDAP_DEBUG_ANY,
-			        "   sock_read_and_send_results error code (wrong JSON type, valid are INTEGER found %d)\n",
-                    json_typeof( result_code ), 0, 0 );
-			    rs->sr_err = 0;
-            /* XXX: Map LDAP returncode strings like LDAP_OPERATIONS_ERROR to integer values */
-		    } else {
-			    rs->sr_err = json_integer_value( result_code );
-		    }
-        }
-
-		result_cookie = json_object_get( result, "cookie" );
-        if( result_cookie ) {
-            struct sockinfo *si = (struct sockinfo *) op->o_bd->be_private;
-
-            if( si->si_cookie ) {
-                json_decref( si->si_cookie );
-            }
-            si->si_cookie = json_incref( result_cookie );
-        }
+	if( rs->sr_err < 0 ) {
+		Debug( LDAP_DEBUG_ANY,
+			"   Returned errorcode is negative\n",
+			0, 0, 0 );
+		rs->sr_err = LDAP_OPERATIONS_ERROR;
+		
 	}
 	send_ldap_result( op, rs );
-	json_decref( result );
+	json_decref( jr );
 }
 
 void

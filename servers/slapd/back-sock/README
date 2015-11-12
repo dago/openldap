@@ -156,3 +156,4 @@ OR
                "matches" : [ { "dn" : "cn=myname,dc=example,dc=com", "cn" : "myname", "sn" : [ "Arnold", "Benjamin" ] } ],
                "cookie": { "authenticated" : 0 },
   "id"      : 1
+}
