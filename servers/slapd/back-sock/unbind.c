@@ -39,6 +39,7 @@ sock_back_unbind(
 	json_t		*params;
 	json_t		*json_request;
 	int		err;
+	json_error_t	error;
 
 	if ( (fp = opensock( si->si_sockpath )) == NULL ) {
 		send_ldap_error( op, rs, LDAP_OTHER,
@@ -64,7 +65,9 @@ sock_back_unbind(
 	json_decref( json_request );
 	fprintf( fp, "\n" );
 
-	/* no response to unbind */
+	/* no response to unbind, read the mandatory result from JSON-RPC and ignore it */
+	(void) json_loadf( fp, 0, &error );
+
 	fclose( fp );
 
 	return 0;
