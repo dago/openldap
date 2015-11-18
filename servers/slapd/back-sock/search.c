@@ -156,7 +156,9 @@ sock_back_search(
 	}
 
 	matches = json_object_get( result, "matches" );
-	if( json_is_array( matches ) ) {
+	if( matches == NULL ) {
+		/* No elements are found */
+	} else if( json_is_array( matches ) ) {
 		/* Array of results */
 		size_t  index;
 		json_t  *value;
