@@ -64,6 +64,7 @@ sock_back_unbind(
 	err = json_dumpf( json_request, fp, 0 );
 	json_decref( json_request );
 	fprintf( fp, "\n" );
+        fflush( fp );
 
 	/* no response to unbind, read the mandatory result from JSON-RPC and ignore it */
 	(void) json_loadf( fp, 0, &error );
